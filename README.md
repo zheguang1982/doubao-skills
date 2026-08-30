@@ -11,6 +11,7 @@
 | role-embedded-scenario | 角色内嵌式情境创设专家：将学习任务转化为故事/主题内部角色的职责，自动生成高参与度教学情境 |
 | yihunci-bianxi-generator | 近义易混词辨析图文+短视频自动生成：输入易混近义词，产出辨析文案、插画绘图 Prompt 与 10 秒视频分镜脚本 |
 | 卡通合影照 | 一键生成“真人与Q版卡通同框”的秋日国风创意合影照（风格基准样例图：https://aka.doubaocdn.com/s/TbwtzjgBLU ） |
+| smartedu-textbook-downloader | 国家中小学智慧教育平台电子教材下载：免登录批量下载智慧中小学平台的电子课本 PDF，支持按学段/学科/版别/年级/册次筛选 |
 
 ## 安装方法
 
