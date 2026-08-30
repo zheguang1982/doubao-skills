@@ -7,7 +7,7 @@
   1) 教材清单：GET https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json
      -> {"urls": "part_100.json,part_101.json,..."}，逐个拉取得到全部教材条目（含 id/title/tag_list）。
   2) 元数据：GET https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json
-     -> ti_items 中 ti_is_source_file=True 且 ti_format="pdf" 的 ti_storages 即 PDF 直链。
+     -> ti_items 中 ti_is_source_file=True 且 ti_format="pdf" 的 ti_storages[0] 即 PDF 直链。
   3) 下载：对 r1-ndr-private.ykt.cbern.com.cn 直链做 UTF-8 百分号编码后 GET，
      携带占位鉴权头（Authorization: Bearer 0 / X-ND-AUTH: MAC id="0",nonce="0",mac="0"），
      校验响应以 %PDF 开头且大小与元数据一致。
@@ -107,7 +107,7 @@ def build_tag_name_index():
 def decode_catalog_url(url):
     """把 tchMaterial 目录页 URL 的 defaultTag（tag_id 列表）解析为 tag_name 列表。"""
     q = parse_qs(urlsplit(url).query)
-    tag_ids = [unquote(x) for x in q.get("defaultTag", [""]).split("/") if x]
+    tag_ids = [unquote(x) for x in q.get("defaultTag", [""])[0].split("/") if x]
     if not tag_ids:
         return []
     mapping = build_tag_name_index()
@@ -256,7 +256,7 @@ def download_pdf(content_id, out_path, timeout=180):
 def cmd_detail(args):
     raw = args.url_or_id
     if raw.startswith("http"):
-        cid = parse_qs(urlsplit(raw).query).get("contentId", [None])
+        cid = parse_qs(urlsplit(raw).query).get("contentId", [None])[0]
     else:
         cid = raw
     if not cid:
@@ -284,10 +284,10 @@ def cmd_list(args):
         print("未找到匹配的教材，可尝试放宽 --filter/--grade/--semester")
         sys.exit(1)
     selected.sort(key=lambda b: (
-        (tag_map(b).get(DIM_STAGE) or ""),
-        (tag_map(b).get(DIM_SUBJECT) or ""),
-        (tag_map(b).get(DIM_GRADE) or ""),
-        (tag_map(b).get(DIM_SEM) or ""),
+        (tag_map(b)[0].get(DIM_STAGE) or ""),
+        (tag_map(b)[0].get(DIM_SUBJECT) or ""),
+        (tag_map(b)[0].get(DIM_GRADE) or ""),
+        (tag_map(b)[0].get(DIM_SEM) or ""),
     ))
     for b in selected:
         by_dim, _ = tag_map(b)
@@ -297,7 +297,7 @@ def cmd_list(args):
         ])), "|", b.get("title"))
     if args.json:
         print("\n--json--")
-        print(json.dumps([{**tag_map(b), "id": b["id"], "title": b["title"]} for b in selected], ensure_ascii=False, indent=2))
+        print(json.dumps([{**tag_map(b)[0], "id": b["id"], "title": b["title"]} for b in selected], ensure_ascii=False, indent=2))
 
 
 def cmd_batch(args):
@@ -339,7 +339,7 @@ def verify_pdf(path):
         print("(未安装 pymupdf，跳过页数校验)")
         return
     doc = pymupdf.open(path)
-    p1 = " ".join(doc.get_text().split())
+    p1 = " ".join(doc[0].get_text().split())[:40]
     print(f"页数: {doc.page_count}  首页: {p1}")
     doc.close()
 
