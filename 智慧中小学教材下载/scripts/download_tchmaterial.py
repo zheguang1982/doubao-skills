@@ -7,7 +7,7 @@
   1) 教材清单：GET https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json
      -> {"urls": "part_100.json,part_101.json,..."}，逐个拉取得到全部教材条目（含 id/title/tag_list）。
   2) 元数据：GET https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/{contentId}.json
-     -> ti_items 中 ti_is_source_file=True 且 ti_format="pdf" 的 ti_storages[0] 即 PDF 直链。
+     -> ti_items 中 ti_is_source_file=True 且 ti_format="pdf" 的 ti_storages 即 PDF 直链。
   3) 下载：对 r1-ndr-private.ykt.cbern.com.cn 直链做 UTF-8 百分号编码后 GET，
      携带占位鉴权头（Authorization: Bearer 0 / X-ND-AUTH: MAC id="0",nonce="0",mac="0"），
      校验响应以 %PDF 开头且大小与元数据一致。
@@ -107,7 +107,7 @@ def build_tag_name_index():
 def decode_catalog_url(url):
     """把 tchMaterial 目录页 URL 的 defaultTag（tag_id 列表）解析为 tag_name 列表。"""
     q = parse_qs(urlsplit(url).query)
-    tag_ids = [unquote(x) for x in q.get("defaultTag", [""])[0].split("/") if x]
+    tag_ids = [unquote(x) for x in q.get("defaultTag", [""]).split("/") if x]
     if not tag_ids:
         return []
     mapping = build_tag_name_index()
@@ -177,30 +177,86 @@ def pretty_name(book):
     return f"{base}.pdf"
 
 
+def _download_chunk(host, path, start, end, timeout=120):
+    """拉取单段字节（HTTP Range）。私有 CDN 单连接约 6.5MiB 截断且会限流，
+    故分块 + 镜像轮换。返回 bytes，失败抛异常。"""
+    url = f"https://{host}{path}"
+    h = dict(BASE_HEADERS)
+    h["Range"] = f"bytes={start}-{end}"
+    req = urllib.request.Request(encode_url_path(url), headers=h)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        if r.status not in (200, 206):
+            raise RuntimeError(f"HTTP {r.status}")
+        return r.read()
+
+
+# 私有 CDN 三个镜像，轮换以规避单连接截断与限流
+_CHUNK_HOSTS = [
+    "r1-ndr-private.ykt.cbern.com.cn",
+    "r2-ndr-private.ykt.cbern.com.cn",
+    "r3-ndr-private.ykt.cbern.com.cn",
+]
+_CHUNK_SIZE = 2 * 1024 * 1024  # 2 MiB/块，远小于 6.5 MiB 截断阈值
+
+
 def download_pdf(content_id, out_path, timeout=180):
-    """下载单本教材，返回 (ok, message, size)。"""
+    """下载单本教材，返回 (ok, message, size)。
+
+    采用 Range 分块下载（r1/r2/r3 镜像轮换），绕开私有 CDN 的单连接 ~6.5MiB
+    截断与限流；任一镜像取不到该块时自动换镜像重试。
+    """
     meta = meta_of(content_id)
     url, meta_size = pdf_url_of(meta)
     if not url:
         return False, "元数据中未找到 PDF 源文件", 0
-    status, data = _request(encode_url_path(url), timeout=timeout)
-    if status != 200:
-        return False, f"HTTP {status}", len(data)
-    if not data.startswith(b"%PDF"):
-        return False, f"非 PDF 响应（前8字节={data[:8]!r}）", len(data)
+    path = urlsplit(url).path
+    total = int(meta_size) if meta_size else None
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or ".", exist_ok=True)
-    with open(out_path, "wb") as f:
-        f.write(data)
+    tmp = out_path + ".part"
+    start, hi = 0, 0
+    try:
+        with open(tmp, "wb") as f:
+            while True:
+                end = start + _CHUNK_SIZE - 1
+                if total:
+                    end = min(end, total - 1)
+                got, last_err = None, None
+                for attempt in range(len(_CHUNK_HOSTS) * 4):
+                    host = _CHUNK_HOSTS[(hi + attempt) % len(_CHUNK_HOSTS)]
+                    try:
+                        got = _download_chunk(host, path, start, end, timeout)
+                        if got:
+                            break
+                    except Exception as e:
+                        last_err = e
+                        time.sleep(1.0)
+                if not got:
+                    return False, f"分块下载失败（{last_err}）", 0
+                hi = (hi + 1) % len(_CHUNK_HOSTS)
+                f.write(got)
+                start += len(got)
+                if total and start >= total:
+                    break
+                if not total and len(got) < _CHUNK_SIZE:
+                    break
+                time.sleep(0.3)
+    except Exception as e:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        return False, f"下载异常: {e}", 0
+    os.replace(tmp, out_path)
     size = os.path.getsize(out_path)
-    if meta_size and abs(size - meta_size) > 2:
-        return True, f"大小不一致(实际{size}/元数据{meta_size})", size
+    if not open(out_path, "rb").read(5).startswith(b"%PDF"):
+        return False, "非 PDF 文件", size
+    if total and abs(size - total) > 2:
+        return True, f"大小不一致(实际{size}/元数据{total})", size
     return True, "OK", size
 
 
 def cmd_detail(args):
     raw = args.url_or_id
     if raw.startswith("http"):
-        cid = parse_qs(urlsplit(raw).query).get("contentId", [None])[0]
+        cid = parse_qs(urlsplit(raw).query).get("contentId", [None])
     else:
         cid = raw
     if not cid:
@@ -228,10 +284,10 @@ def cmd_list(args):
         print("未找到匹配的教材，可尝试放宽 --filter/--grade/--semester")
         sys.exit(1)
     selected.sort(key=lambda b: (
-        (tag_map(b)[0].get(DIM_STAGE) or ""),
-        (tag_map(b)[0].get(DIM_SUBJECT) or ""),
-        (tag_map(b)[0].get(DIM_GRADE) or ""),
-        (tag_map(b)[0].get(DIM_SEM) or ""),
+        (tag_map(b).get(DIM_STAGE) or ""),
+        (tag_map(b).get(DIM_SUBJECT) or ""),
+        (tag_map(b).get(DIM_GRADE) or ""),
+        (tag_map(b).get(DIM_SEM) or ""),
     ))
     for b in selected:
         by_dim, _ = tag_map(b)
@@ -241,7 +297,7 @@ def cmd_list(args):
         ])), "|", b.get("title"))
     if args.json:
         print("\n--json--")
-        print(json.dumps([{**tag_map(b)[0], "id": b["id"], "title": b["title"]} for b in selected], ensure_ascii=False, indent=2))
+        print(json.dumps([{**tag_map(b), "id": b["id"], "title": b["title"]} for b in selected], ensure_ascii=False, indent=2))
 
 
 def cmd_batch(args):
@@ -283,7 +339,7 @@ def verify_pdf(path):
         print("(未安装 pymupdf，跳过页数校验)")
         return
     doc = pymupdf.open(path)
-    p1 = " ".join(doc[0].get_text().split())[:40]
+    p1 = " ".join(doc.get_text().split())
     print(f"页数: {doc.page_count}  首页: {p1}")
     doc.close()
 
