@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>__TITLE__</title>
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Baloo+2:wght@600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+  :root{
+    /* 配色：纸箱瓦楞、肉垫粉、毛线橘、奶油底 */
+    --carton:#E8D5B7;        /* 瓦楞纸箱 */
+    --carton-deep:#D4BC96;   /* 纸箱阴影 */
+    --paw:#F2A0A0;           /* 肉垫粉 */
+    --yarn:#E4703A;          /* 毛线橘，唯一强调色 */
+    --ink:#3B2F2A;           /* 墨棕，正文 */
+    --ink-soft:#7A6A60;
+    --cream:#FFF9F0;         /* 奶油底 */
+    --danger:#C7503A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    background:
+      radial-gradient(circle at 20% 15%, #FFF3E0 0%, transparent 55%),
+      radial-gradient(circle at 85% 80%, #FBE3D6 0%, transparent 50%),
+      var(--cream);
+    color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    padding:12px;
+    overflow:hidden;
+    user-select:none; -webkit-user-select:none;
+  }
+
+  /* ===== 布局：纸箱造型的游戏舱 ===== */
+  .shell{
+    display:flex; flex-direction:column;
+    width:min(420px, 100%);
+    height:min(760px, 100vh - 24px);
+    gap:8px;
+  }
+
+  .topbar{
+    display:flex; align-items:stretch; gap:8px;
+  }
+  .score-card{
+    flex:1;
+    background:var(--carton);
+    border:2px solid var(--ink);
+    border-radius:14px 14px 4px 14px;
+    padding:8px 12px;
+    box-shadow:3px 3px 0 var(--ink);
+    display:flex; align-items:baseline; gap:8px;
+  }
+  .score-card .label{
+    font-size:11px; letter-spacing:.14em; color:var(--ink-soft); font-weight:700;
+  }
+  .score-card .val{
+    font-family:"Baloo 2",system-ui,sans-serif;
+    font-size:30px; font-weight:800; line-height:1; color:var(--yarn);
+    font-variant-numeric:tabular-nums;
+  }
+  .best{
+    background:var(--cream);
+    border:2px solid var(--ink);
+    border-radius:14px 14px 14px 4px;
+    padding:8px 12px; box-shadow:3px 3px 0 var(--ink);
+    display:flex; flex-direction:column; justify-content:center; min-width:82px;
+  }
+  .best .label{font-size:10px; letter-spacing:.12em; color:var(--ink-soft); font-weight:700;}
+  .best .val{font-family:"Baloo 2",sans-serif; font-size:19px; font-weight:800; font-variant-numeric:tabular-nums;}
+
+  /* next 预告 + 进化链 */
+  .infobar{
+    display:flex; align-items:center; gap:8px;
+    background:var(--cream);
+    border:2px solid var(--ink);
+    border-radius:12px;
+    padding:6px 8px;
+    box-shadow:3px 3px 0 var(--ink);
+  }
+  .next-slot{display:flex; align-items:center; gap:6px; flex-shrink:0; padding-right:8px; border-right:2px dashed var(--carton-deep);}
+  .next-slot .cap{font-size:10px; font-weight:700; color:var(--ink-soft); letter-spacing:.1em;}
+  .next-slot img{width:30px; height:30px; display:block;}
+  .chain{display:flex; align-items:center; gap:2px; overflow:hidden; flex:1;}
+  .chain img{width:19px; height:19px; opacity:.42; transition:opacity .25s, transform .25s;}
+  .chain img.lit{opacity:1; transform:scale(1.22);}
+
+  /* ===== 游戏区：纸箱内壁 ===== */
+  .arena-wrap{
+    position:relative; flex:1;
+    border:3px solid var(--ink);
+    border-radius:10px 10px 18px 18px;
+    background:
+      repeating-linear-gradient(90deg, rgba(212,188,150,.30) 0 2px, transparent 2px 13px),
+      linear-gradient(180deg,#FFFDF8 0%, #FBEFE0 100%);
+    box-shadow:4px 4px 0 var(--ink), inset 0 3px 14px rgba(122,106,96,.13);
+    overflow:hidden;
+    touch-action:none;
+  }
+  canvas{display:block; width:100%; height:100%;}
+
+  /* 顶部死亡线 */
+  .deadline{
+    position:absolute; left:0; right:0; height:0;
+    border-top:2px dashed rgba(199,80,58,.42);
+    pointer-events:none; transition:border-color .2s;
+  }
+  .deadline.hot{border-top-color:var(--danger); animation:pulse .5s ease-in-out infinite;}
+  @keyframes pulse{50%{opacity:.32;}}
+
+  /* 落点指示线 */
+  .aim{
+    position:absolute; top:0; width:2px;
+    background:linear-gradient(180deg, rgba(228,112,58,.55), transparent);
+    pointer-events:none; opacity:0; transition:opacity .18s;
+  }
+  .aim.on{opacity:1;}
+
+  /* ===== 弹层 ===== */
+  .overlay{
+    position:absolute; inset:0; z-index:20;
+    background:rgba(59,47,42,.55);
+    backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .22s;
+  }
+  .overlay.show{opacity:1; pointer-events:auto;}
+  .panel{
+    background:var(--cream);
+    border:3px solid var(--ink);
+    border-radius:16px;
+    box-shadow:6px 6px 0 var(--ink);
+    padding:22px 24px; text-align:center;
+    width:min(292px, 84%);
+    transform:translateY(10px) scale(.97); transition:transform .22s;
+  }
+  .overlay.show .panel{transform:none;}
+  .panel h2{
+    font-family:"Baloo 2",sans-serif; font-size:25px; font-weight:800;
+    margin-bottom:4px; letter-spacing:.02em;
+  }
+  .panel .sub{font-size:12px; color:var(--ink-soft); margin-bottom:14px; line-height:1.55;}
+  .final-cat{width:76px; height:76px; margin:0 auto 8px; display:block;}
+  .stat-row{display:flex; gap:10px; margin-bottom:16px;}
+  .stat{
+    flex:1; background:var(--carton); border:2px solid var(--ink);
+    border-radius:10px; padding:8px 4px;
+  }
+  .stat .k{font-size:10px; color:var(--ink-soft); font-weight:700; letter-spacing:.08em;}
+  .stat .v{font-family:"Baloo 2",sans-serif; font-size:22px; font-weight:800; font-variant-numeric:tabular-nums;}
+  .btn{
+    display:block; width:100%;
+    font-family:"Baloo 2","Noto Sans SC",sans-serif;
+    font-size:16px; font-weight:800; letter-spacing:.04em;
+    padding:12px; min-height:46px;
+    background:var(--yarn); color:#fff;
+    border:2px solid var(--ink); border-radius:11px;
+    box-shadow:3px 3px 0 var(--ink);
+    cursor:pointer; transition:transform .1s, box-shadow .1s;
+  }
+  .btn:active{transform:translate(3px,3px); box-shadow:0 0 0 var(--ink);}
+  .btn.ghost{background:var(--cream); color:var(--ink); margin-top:8px;}
+
+  /* 暂停按钮 */
+  .pause-btn{
+    position:absolute; top:8px; right:8px; z-index:15;
+    width:34px; height:34px;
+    background:var(--cream); border:2px solid var(--ink); border-radius:9px;
+    box-shadow:2px 2px 0 var(--ink);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    padding:0;
+  }
+  .pause-btn svg{width:15px; height:15px;}
+
+  /* 合成时的加分气泡 */
+  .pop{
+    position:absolute; z-index:12; pointer-events:none;
+    font-family:"Baloo 2",sans-serif; font-weight:800; font-size:17px;
+    color:var(--yarn); text-shadow:0 1px 0 #fff;
+    animation:floatUp .75s ease-out forwards;
+  }
+  @keyframes floatUp{
+    0%{opacity:0; transform:translate(-50%,0) scale(.7);}
+    22%{opacity:1; transform:translate(-50%,-11px) scale(1.14);}
+    100%{opacity:0; transform:translate(-50%,-40px) scale(1);}
+  }
+
+  /* 高级合成（Lv.4 及以上）时的台词气泡：炸开式出现 */
+  .say{
+    position:absolute; z-index:13; pointer-events:none;
+    width:max-content; max-width:176px; padding:7px 11px;
+    background:#fff; color:var(--ink);
+    border:2px solid var(--ink); border-radius:12px;
+    box-shadow:2px 2px 0 var(--ink);
+    font-size:12.5px; font-weight:700; line-height:1.35;
+    text-align:center; white-space:normal; word-break:break-word;
+    transform-origin:50% 100%;
+    animation:sayLife 1.9s ease-out forwards;
+  }
+  .say::before{   /* 底部小尾巴 */
+    content:''; position:absolute; left:50%; bottom:-7px; z-index:-1;
+    width:10px; height:10px; background:#fff;
+    border-right:2px solid var(--ink); border-bottom:2px solid var(--ink);
+    transform:translateX(-50%) rotate(45deg);
+  }
+  .say::after{    /* 炸开冲击波环 */
+    content:''; position:absolute; left:50%; bottom:-16px;
+    width:14px; height:14px; border:2px solid var(--yarn); border-radius:50%;
+    transform:translateX(-50%);
+    animation:sayRing .55s ease-out forwards;
+  }
+  @keyframes sayLife{
+    0%{opacity:0; transform:translate(-50%,-100%) scale(0);}
+    14%{opacity:1; transform:translate(-50%,-100%) scale(1.2);}
+    24%{transform:translate(-50%,-100%) scale(.92);}
+    34%{transform:translate(-50%,-100%) scale(1);}
+    80%{opacity:1; transform:translate(-50%,-100%) scale(1);}
+    100%{opacity:0; transform:translate(-50%,-132%) scale(.97);}
+  }
+  @keyframes sayRing{
+    0%{width:14px; height:14px; opacity:.9;}
+    100%{width:64px; height:64px; opacity:0;}
+  }
+
+  .hint{
+    text-align:center; font-size:11px; color:var(--ink-soft); letter-spacing:.03em;
+  }
+
+  @media (max-height:680px){
+    .score-card .val{font-size:25px;}
+    .chain img{width:16px; height:16px;}
+    .next-slot img{width:26px; height:26px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ===== 顶部：分数 ===== -->
+  <div class="topbar">
+    <div class="score-card">
+      <span class="label">SCORE</span>
+      <span class="val" id="score">0</span>
+    </div>
+    <div class="best">
+      <span class="label">BEST</span>
+      <span class="val" id="best">0</span>
+    </div>
+  </div>
+
+  <!-- ===== 预告 + 进化链 ===== -->
+  <div class="infobar">
+    <div class="next-slot">
+      <span class="cap">NEXT</span>
+      <img id="nextImg" alt="下一个">
+    </div>
+    <div class="chain" id="chain"></div>
+  </div>
+
+  <!-- ===== 游戏区 ===== -->
+  <div class="arena-wrap" id="arena">
+    <canvas id="cv"></canvas>
+    <div class="deadline" id="deadline"></div>
+    <div class="aim" id="aim"></div>
+    <button class="pause-btn" id="pauseBtn" aria-label="暂停">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3B2F2A" stroke-width="2.5" stroke-linecap="round">
+        <line x1="8" y1="5" x2="8" y2="19"></line>
+        <line x1="16" y1="5" x2="16" y2="19"></line>
+      </svg>
+    </button>
+
+    <!-- 结束 / 暂停面板 -->
+    <div class="overlay" id="overlay">
+      <div class="panel">
+        <img class="final-cat" id="finalCat" alt="" style="display:none">
+        <h2 id="panelTitle">__OVER_TITLE__</h2>
+        <p class="sub" id="panelSub">叠得太高，从箱子里滚出来了</p>
+        <div class="stat-row" id="statRow">
+          <div class="stat"><div class="k">本局</div><div class="v" id="finalScore">0</div></div>
+          <div class="stat"><div class="k">最高</div><div class="v" id="finalBest">0</div></div>
+        </div>
+        <button class="btn" id="againBtn">再来一局</button>
+        <button class="btn ghost" id="resumeBtn" style="display:none">继续</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">移动鼠标或手指选位置，松开投放 · 同款相撞合成更大一级</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js" integrity="sha384-ZRKYEXtLBVeqs9z1WxyeKutCqnkqolS/r1EUWuoUpG4ZKbnRAIXnHhHdnNuiB6CL" crossorigin="anonymous"></script>
+<script>
+/* ===== 数据：各级贴图，半径按原版水果比例递增（由脚本注入） ===== */
+var CATS = /*__CATS_JSON__*/[];
+/* 合成得分：等差递增，越大越值钱 */
+var MERGE_SCORE = [1,3,6,10,15,21,28,36,45,55];
+var DROPPABLE = 5;          /* 只能投放前 5 级 */
+var DEAD_Y = 96;            /* 死亡线距顶部 */
+var DEAD_HOLD = 1500;       /* 越线持续多久判负 */
+/* 高级合成台词：空池则不弹气泡；SAY_FROM_LEVEL 是层级 index 阈值（3 = 显示 Lv.4 起） */
+var SAYINGS = /*__SAYINGS_JSON__*/[];
+var SAY_FROM_LEVEL = /*__SAY_FROM__*/;
+
+var Engine = Matter.Engine, World = Matter.World, Bodies = Matter.Bodies,
+    Body = Matter.Body, Events = Matter.Events, Composite = Matter.Composite;
+
+var arena = document.getElementById('arena');
+var cv = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+
+var W = 0, H = 0, DPR = 1;
+var engine, world, walls = [];
+var imgs = [], imgReady = false;
+var rafId = null;
+
+var state = {
+  score:0, best:0,
+  cur:0, next:0,
+  aimX:0,
+  canDrop:true,
+  over:false,
+  paused:false,
+  overLineSince:0,
+  maxLevel:-1
+};
+
+/* ---------- 预加载贴图 ---------- */
+function preload(cb){
+  var n = 0, failed = [];
+  CATS.forEach(function(c, i){
+    /* 注意：不要设 crossOrigin —— 图床不返回 CORS 头，设了会导致加载失败。
+       canvas 只做绘制、不读像素（无 getImageData / toDataURL），无需跨域授权。 */
+    var im = new Image();
+    im.onload = function(){ done(); };
+    im.onerror = function(){ failed.push(i); done(); };
+    im.src = c.url;
+    imgs[i] = im;
+    function done(){
+      n++;
+      if(n === CATS.length){
+        imgReady = true;
+        if(failed.length) console.warn('贴图加载失败的层级:', failed);
+        cb();
+      }
+    }
+  });
+}
+
+/* ---------- 尺寸 ---------- */
+function resize(){
+  var rect = arena.getBoundingClientRect();
+  W = rect.width; H = rect.height;
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  document.getElementById('deadline').style.top = DEAD_Y + 'px';
+  if(world) buildWalls();
+}
+
+function buildWalls(){
+  walls.forEach(function(w){ World.remove(world, w); });
+  var t = 60;
+  walls = [
+    Bodies.rectangle(W/2, H + t/2, W + t*2, t, { isStatic:true, restitution:.05, friction:.55 }),
+    Bodies.rectangle(-t/2, H/2, t, H*3, { isStatic:true, restitution:.02, friction:.35 }),
+    Bodies.rectangle(W + t/2, H/2, t, H*3, { isStatic:true, restitution:.02, friction:.35 })
+  ];
+  World.add(world, walls);
+}
+
+/* ---------- 初始化物理 ---------- */
+function initPhysics(){
+  engine = Engine.create();
+  engine.gravity.y = 1.25;
+  world = engine.world;
+  buildWalls();
+
+  Events.on(engine, 'collisionStart', function(ev){
+    ev.pairs.forEach(function(p){
+      var a = p.bodyA, b = p.bodyB;
+      if(!a.plugin || !b.plugin) return;
+      if(a.plugin.level === undefined || b.plugin.level === undefined) return;
+      if(a.plugin.merged || b.plugin.merged) return;
+      if(a.plugin.level !== b.plugin.level) return;
+      if(a.plugin.level >= CATS.length - 1) return;   /* 顶级不再合成 */
+      a.plugin.merged = b.plugin.merged = true;
+      mergeCats(a, b);
+    });
+  });
+}
+
+function mergeCats(a, b){
+  var lv = a.plugin.level;
+  var nx = (a.position.x + b.position.x) / 2;
+  var ny = (a.position.y + b.position.y) / 2;
+  World.remove(world, a); World.remove(world, b);
+
+  var nl = lv + 1;
+  var nb = makeCat(nx, ny, nl);
+  World.add(world, nb);
+  /* 合成瞬间给一点向上的弹，手感更活 */
+  Body.setVelocity(nb, { x:(Math.random()-.5)*1.4, y:-1.6 });
+
+  addScore(MERGE_SCORE[lv] || 1, nx, ny);
+  if(nl >= SAY_FROM_LEVEL) sayBubble(nx, ny, CATS[nl].r);   /* 达到阈值随机弹台词 */
+  if(nl > state.maxLevel){ state.maxLevel = nl; paintChain(); }
+}
+
+function makeCat(x, y, level){
+  var c = CATS[level];
+  var body = Bodies.circle(x, y, c.r, {
+    restitution:.18,
+    friction:.42,
+    frictionStatic:.6,
+    density:.0011,
+    slop:.02,
+    inertia:Infinity        /* 锁自转：人像/非对称贴图不能随碰撞倒置（圆形水果同样适用） */
+  });
+  body.plugin = { level:level, merged:false, born:performance.now(), spin:(Math.random()-.5)*.05 };
+  return body;
+}
+
+/* ---------- 分数 ---------- */
+function addScore(v, x, y){
+  state.score += v;
+  document.getElementById('score').textContent = state.score;
+  if(state.score > state.best){
+    state.best = state.score;
+    document.getElementById('best').textContent = state.best;
+    saveBest(state.best);
+  }
+  if(x !== undefined) popText('+' + v, x, y);
+}
+
+function popText(txt, x, y){
+  var el = document.createElement('div');
+  el.className = 'pop'; el.textContent = txt;
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+  arena.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 780);
+}
+
+/* 高级合成台词池：达到 SAY_FROM_LEVEL 时随机抽一句，炸开式气泡；空池不弹 */
+function sayBubble(x, y, r){
+  if(!SAYINGS.length) return;
+  var olds = arena.querySelectorAll('.say');
+  if(olds.length > 3) olds[0].remove();           /* 防止连续合成时气泡堆满 */
+  var el = document.createElement('div');
+  el.className = 'say';
+  el.textContent = SAYINGS[Math.floor(Math.random() * SAYINGS.length)];
+  el.style.left = x + 'px';
+  el.style.top = (y - r - 12) + 'px';
+  arena.appendChild(el);
+  /* 按真实宽度把气泡夹回游戏区内，避免靠边时长句被压成竖条或溢出 */
+  var w = el.offsetWidth;
+  var cx = Math.max(w / 2 + 2, Math.min(W - w / 2 - 2, x));
+  el.style.left = cx + 'px';
+  setTimeout(function(){ el.remove(); }, 1950);
+}
+
+function loadBest(){
+  try{ return parseInt(localStorage.getItem('catMergeBest') || '0', 10) || 0; }
+  catch(e){ return 0; }
+}
+function saveBest(v){
+  try{ localStorage.setItem('catMergeBest', String(v)); }catch(e){}
+}
+
+/* ---------- 投放 ---------- */
+function pickNext(){
+  /* 随机 0..DROPPABLE-1，只投放前几级，保证开局不至于太难 */
+  return Math.floor(Math.random() * DROPPABLE);
+}
+
+function clampX(x, level){
+  var r = CATS[level].r;
+  return Math.max(r + 4, Math.min(W - r - 4, x));
+}
+
+function drop(){
+  if(!state.canDrop || state.over || state.paused) return;
+  state.canDrop = false;
+
+  var lv = state.cur;
+  var x = clampX(state.aimX, lv);
+  var body = makeCat(x, DEAD_Y - 34, lv);
+  Body.setVelocity(body, { x:0, y:2 });
+  World.add(world, body);
+
+  state.cur = state.next;
+  state.next = pickNext();
+  paintNext();
+
+  setTimeout(function(){ state.canDrop = true; }, 340);
+}
+
+/* ---------- UI 绘制 ---------- */
+function paintNext(){
+  /* NEXT 槽显示「松手即会掉落」的当前球（state.cur），保证所见即所投 */
+  document.getElementById('nextImg').src = CATS[state.cur].url;
+  document.getElementById('nextImg').alt = CATS[state.cur].name;
+}
+
+function paintChain(){
+  var box = document.getElementById('chain');
+  box.innerHTML = '';
+  CATS.forEach(function(c, i){
+    var im = document.createElement('img');
+    im.src = c.url; im.alt = c.name;
+    if(i <= state.maxLevel) im.className = 'lit';
+    box.appendChild(im);
+  });
+}
+
+/* ---------- 主循环 ---------- */
+function tick(){
+  if(state.paused || state.over){ rafId = null; return; }
+  Engine.update(engine, 1000/60);
+  render();
+  checkDead();
+  rafId = requestAnimationFrame(tick);
+}
+
+function startLoop(){
+  if(rafId === null && !state.paused && !state.over){
+    rafId = requestAnimationFrame(tick);
+  }
+}
+function stopLoop(){
+  if(rafId !== null){ cancelAnimationFrame(rafId); rafId = null; }
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  var bodies = Composite.allBodies(world);
+  for(var i=0;i<bodies.length;i++){
+    var b = bodies[i];
+    if(!b.plugin || b.plugin.level === undefined) continue;
+    var c = CATS[b.plugin.level];
+    var im = imgs[b.plugin.level];
+    ctx.save();
+    ctx.translate(b.position.x, b.position.y);
+    /* 不旋转：body 已 inertia:Infinity 锁正立，人像、文字类贴图方向固定 */
+    /* ctx.rotate(b.angle); */
+    /* 落地阴影，增加体积感 */
+    ctx.globalAlpha = .13;
+    ctx.beginPath();
+    ctx.arc(1.5, 2.5, c.r, 0, Math.PI*2);
+    ctx.fillStyle = '#3B2F2A';
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    if(im && im.complete && im.naturalWidth){
+      ctx.drawImage(im, -c.r, -c.r, c.r*2, c.r*2);
+    }else{
+      ctx.beginPath(); ctx.arc(0,0,c.r,0,Math.PI*2);
+      ctx.fillStyle = '#E4703A'; ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function checkDead(){
+  var bodies = Composite.allBodies(world);
+  var hot = false;
+  var now = performance.now();
+  for(var i=0;i<bodies.length;i++){
+    var b = bodies[i];
+    if(!b.plugin || b.plugin.level === undefined) continue;
+    if(now - b.plugin.born < 900) continue;              /* 刚投下的不算 */
+    if(Math.abs(b.velocity.y) > 1.1) continue;           /* 还在飞的不算 */
+    var top = b.position.y - CATS[b.plugin.level].r;
+    if(top < DEAD_Y){ hot = true; break; }
+  }
+  document.getElementById('deadline').classList.toggle('hot', hot);
+  if(hot){
+    if(state.overLineSince === 0) state.overLineSince = now;
+    else if(now - state.overLineSince > DEAD_HOLD) gameOver();
+  }else{
+    state.overLineSince = 0;
+  }
+}
+
+/* ---------- 结束 / 暂停 ---------- */
+function gameOver(){
+  if(state.over) return;
+  state.over = true;
+  stopLoop();
+  var fc = document.getElementById('finalCat');
+  if(state.maxLevel >= 0){
+    fc.src = CATS[state.maxLevel].url; fc.style.display = 'block';
+  }else{
+    fc.style.display = 'none';
+  }
+  document.getElementById('panelTitle').textContent = '__OVER_TITLE__';
+  document.getElementById('panelSub').textContent =
+    state.maxLevel >= 0
+      ? '本局最大合成：' + CATS[state.maxLevel].name
+      : '一只都没合成，再试试';
+  document.getElementById('statRow').style.display = 'flex';
+  document.getElementById('finalScore').textContent = state.score;
+  document.getElementById('finalBest').textContent = state.best;
+  document.getElementById('againBtn').style.display = 'block';
+  document.getElementById('resumeBtn').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+}
+
+function pause(){
+  if(state.over || state.paused) return;
+  state.paused = true;
+  stopLoop();
+  document.getElementById('panelTitle').textContent = '歇会儿';
+  document.getElementById('panelSub').textContent = '所有物件停在原地等你';
+  document.getElementById('finalCat').style.display = 'none';
+  document.getElementById('statRow').style.display = 'none';
+  document.getElementById('againBtn').style.display = 'none';
+  document.getElementById('resumeBtn').style.display = 'block';
+  document.getElementById('overlay').classList.add('show');
+}
+
+function resume(){
+  state.paused = false;
+  document.getElementById('overlay').classList.remove('show');
+  startLoop();
+}
+
+/* 真 reset：清空全部状态，不用 reload */
+function restart(){
+  var bodies = Composite.allBodies(world);
+  bodies.forEach(function(b){
+    if(b.plugin && b.plugin.level !== undefined) World.remove(world, b);
+  });
+  state.score = 0;
+  state.over = false;
+  state.paused = false;
+  state.canDrop = true;
+  state.overLineSince = 0;
+  state.maxLevel = -1;
+  state.cur = pickNext();
+  state.next = pickNext();
+  document.getElementById('score').textContent = '0';
+  document.getElementById('deadline').classList.remove('hot');
+  document.getElementById('overlay').classList.remove('show');
+  paintNext(); paintChain();
+  startLoop();
+}
+
+/* ---------- 输入：Pointer 统一双端 ---------- */
+function updateAim(clientX){
+  var rect = arena.getBoundingClientRect();
+  var x = clampX(clientX - rect.left, state.cur);
+  state.aimX = x;
+  var aim = document.getElementById('aim');
+  aim.style.left = x + 'px';
+  aim.style.height = DEAD_Y + 'px';
+  aim.classList.add('on');
+}
+
+arena.addEventListener('pointerdown', function(e){
+  if(state.over || state.paused) return;
+  updateAim(e.clientX);
+});
+arena.addEventListener('pointermove', function(e){
+  if(state.over || state.paused) return;
+  updateAim(e.clientX);
+});
+arena.addEventListener('pointerup', function(e){
+  if(state.over || state.paused) return;
+  updateAim(e.clientX);
+  drop();
+  document.getElementById('aim').classList.remove('on');
+});
+arena.addEventListener('pointerleave', function(){
+  document.getElementById('aim').classList.remove('on');
+});
+
+/* 键盘：左右移动 + 空格投放 */
+window.addEventListener('keydown', function(e){
+  if(state.over || state.paused) return;
+  var step = 16;
+  if(e.key === 'ArrowLeft'){ state.aimX = clampX(state.aimX - step, state.cur); syncAim(); e.preventDefault(); }
+  else if(e.key === 'ArrowRight'){ state.aimX = clampX(state.aimX + step, state.cur); syncAim(); e.preventDefault(); }
+  else if(e.key === ' ' || e.key === 'Enter'){ drop(); e.preventDefault(); }
+  else if(e.key === 'Escape'){ pause(); }
+});
+function syncAim(){
+  var aim = document.getElementById('aim');
+  aim.style.left = state.aimX + 'px';
+  aim.style.height = DEAD_Y + 'px';
+  aim.classList.add('on');
+  clearTimeout(syncAim._t);
+  syncAim._t = setTimeout(function(){ aim.classList.remove('on'); }, 900);
+}
+
+document.getElementById('pauseBtn').addEventListener('click', pause);
+document.getElementById('againBtn').addEventListener('click', restart);
+document.getElementById('resumeBtn').addEventListener('click', resume);
+
+/* 切后台自动暂停 */
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden && !state.over && !state.paused) pause();
+});
+
+window.addEventListener('resize', function(){
+  resize();
+});
+
+/* ---------- 启动 ---------- */
+var booted = false;
+function boot(){
+  if(booted) return;        /* 防止预载回调与兜底计时器重复启动 */
+  booted = true;
+  resize();
+  initPhysics();
+  state.best = loadBest();
+  document.getElementById('best').textContent = state.best;
+  state.cur = pickNext();
+  state.next = pickNext();
+  state.aimX = W / 2;
+  paintNext(); paintChain();
+  startLoop();
+}
+
+preload(function(){ boot(); });
+/* 图片慢时也先把物理跑起来，避免白屏；贴图后到会自动补上 */
+setTimeout(boot, 2500);
+</script>
+</body>
+</html>
