@@ -50,7 +50,9 @@ description: 将任意文本（工作总结、周报、汇报、纪要等）自�
 
 ## 风格参考
 
-参考样图见 [assets/style-reference.png](assets/style-reference.png)。完整风格规范、配色、布局、映射规则、Prompt模板和质检清单见 [references/style-guide.md](references/style-guide.md)。
+参考样图（手绘水彩信息图风格基准）：https://aka.doubaocdn.com/s/cfBNWVlK85
+
+完整风格规范、配色、布局、映射规则、Prompt模板和质检清单见 [references/style-guide.md](references/style-guide.md)。
 
 ## 注意事项
 
