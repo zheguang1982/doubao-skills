@@ -68,9 +68,9 @@ description: 将用户上传的真实人物照片转换为日系现代动漫卡�
 ## 风格参考图
 
 `assets/` 目录下存放了 3 张风格参考样例：
-- `style_ref_group_photo.png` — 多人活动合影场景
-- `style_ref_office.png` — 室内办公协作场景
-- `style_ref_casual.png` — 三人休闲合影暖色调场景
+- `style_ref_group_photo.jpg` — 多人活动合影场景
+- `style_ref_office.jpg` — 室内办公协作场景
+- `style_ref_casual.jpg` — 三人休闲合影暖色调场景
 
 如需增强风格一致性，可将对应场景的参考图一并传入 `image_reference_url_list`（用户原图在前，参考图在后），但用户原图必须始终包含在内。
 
