@@ -1,0 +1,4 @@
+interface:
+  display_name: "bukenglaoshi-editable-courseware"
+  short_description: "成套卡通课件：动态提取参考风格，逐页设计与拆分素材，输出整图或可编辑PPT"
+  default_prompt: "请使用 $bukenglaoshi-editable-courseware，按我本次的内容与参考风格策划整套课件，逐页设计并拆解所需元素，输出要求的整图或可编辑PPT；参考中的文字、人物、场景与物品不作为本次内容。"
