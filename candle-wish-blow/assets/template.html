@@ -11,25 +11,26 @@
 @property --shear{syntax:"<number>";inherits:true;initial-value:0;}
 @property --tilt{syntax:"<angle>";inherits:true;initial-value:0deg;}
 /* ================================================================
-   视觉方向
-   世界    夜里熄了灯的房间，一张脸被三簇火苗照亮
-   材质    奶油、蜡、烟、空气里的浮尘
-   配色    午夜靛蓝 #0a0a1f / 烛焰橙 #ff8c26 / 焰心 #fff6d8
+   视觉方向（16:9 大屏版）
+   世界    生日那天晚上的一间餐厅，整面 16:9 的墙就是舞台
+   事件    关灯 → 蛋糕在烛光里现身 → 三根蜡烛依次点亮 → 一口气吹灭
+   材质    奶油、蜡、烟、空气里的浮尘、暖橙色的光
+   配色    午夜靛蓝 #04030b / 烛焰橙 #ff7a1a / 焰心 #fff8e0
    签名    气流实时把火苗吹弯——风力越大歪得越狠，撤气就弹回来
+   音乐    生日快乐 MIDI 音序（Web Audio 现场合成，无外部音频依赖）
    ================================================================ */
 :root{
-  --ink:#07060f;
+  --ink:#04030b;
   --wax:#f6efe2;
   --f-out:#ff7a1a;
   --f-mid:#ffb545;
   --f-core:#fff8e0;
   --mint:#7fe3c4;
-  --day: url("https://aka.doubaocdn.com/s/1EvjUfgcEn");
-  --night: url("https://aka.doubaocdn.com/s/HT4LYQVLv6");
+  --day:url("https://aka.doubaocdn.com/s/L2qHj7u5gr");
+  --night:url("https://aka.doubaocdn.com/s/uu4pCYsnCC");
   --f-disp:"Noto Serif SC","Songti SC",serif;
   --f-hand:"Ma Shan Zheng","Kaiti SC",cursive;
   --f-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB",sans-serif;
-  --dark:0;      /* 关灯进度 */
   --glow:0;      /* 烛光总量 */
   --tilt:0deg;   /* 气流偏角 */
   --shear:0;     /* 气流剪切 */
@@ -45,21 +46,36 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 
-/* ===== 舞台 ===== */
+/* ===== 舞台：16:9，永远完整落在屏幕里 ===== */
 .stage{
   position:fixed;inset:0;
   display:grid;place-items:center;
-  perspective:1200px;
 }
 .frame{
   position:relative;
-  height:100dvh;aspect-ratio:1536/2048;max-width:100vw;
+  width:min(100vw, calc(100dvh * 16 / 9));
+  height:min(100dvh, calc(100vw * 9 / 16));
+  aspect-ratio:16 / 9;
+  overflow:hidden;
+  background:#000;
   transform:translateX(calc(var(--shudder) * 2px));
+  box-shadow:0 40px 120px rgba(0,0,0,.75);
 }
-/* 两张底图叠放，交叉淡入 —— 关灯不是滤镜 */
+/* 场景框：永远保持 16:9 的画面比例。
+   底图、火焰、青烟都住在这里，所以火焰百分比与烛芯像素永久对齐，
+   哪怕屏幕不是 16:9、场景被裁切放大也一样。 */
+.scene{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:100%;aspect-ratio:16 / 9;
+  overflow:hidden;
+}
+/* 两张 16:9 底图叠放，交叉淡入 —— 关灯不是滤镜，是换一个房间 */
 .plate{
   position:absolute;inset:0;
-  background-size:cover;background-position:center;
+  background-size:100% 100%;   /* 铺满即等比例：火焰百分比与烛芯像素一一对应 */
+  background-position:center;
+  background-repeat:no-repeat;
 }
 .plate.day{
   background-image:var(--day);
@@ -73,7 +89,7 @@ body{
 }
 body.dark .plate.day{opacity:0;}
 body.dark .plate.night{opacity:1;}
-/* 关灯瞬间的一记全黑，吃掉两图的细微位移 */
+/* 关灯瞬间的一记全黑，吃掉两图的细微位移，也吃掉"蛋糕出现的魔术" */
 .blackout{
   position:absolute;inset:0;background:#000;
   opacity:0;pointer-events:none;
@@ -85,21 +101,22 @@ body.dark .plate.night{opacity:1;}
   62%{opacity:1;}
   100%{opacity:0;}
 }
-/* 两侧灰边补齐：同图放大铺底 */
+/* 屏幕外那一圈补齐：同图放大模糊铺底 */
 .bleed{
-  position:fixed;inset:-10%;z-index:-1;
+  position:fixed;inset:-12%;z-index:-1;
   background-image:var(--night);
   background-size:cover;background-position:center;
-  filter:blur(60px) brightness(.72);
+  filter:blur(70px) brightness(.62);
   transition:filter 1.15s ease;
 }
-body.dark .bleed{filter:blur(60px) brightness(.22);}
-/* 烛光在环境里的溢出 */
+body.dark .bleed{filter:blur(70px) brightness(.16);}
+/* 烛光在环境里的溢出：压在整个蛋糕上 */
 .spill{
   position:absolute;inset:0;pointer-events:none;
   background:
-    radial-gradient(ellipse 30% 17% at 50% 31%, rgba(255,178,86,.85) 0%, rgba(255,140,40,.32) 40%, rgba(255,120,30,0) 72%),
-    radial-gradient(ellipse 62% 40% at 50% 44%, rgba(255,150,60,.30) 0%, rgba(255,120,40,0) 70%);
+    radial-gradient(ellipse 26% 30% at 50.3% 56%, rgba(255,178,86,.62) 0%, rgba(255,140,40,.24) 44%, rgba(255,120,30,0) 74%),
+    radial-gradient(ellipse 64% 48% at 50.3% 64%, rgba(255,150,60,.26) 0%, rgba(255,120,40,0) 72%),
+    radial-gradient(ellipse 16% 12% at 50.3% 34%, rgba(255,196,120,.30) 0%, rgba(255,150,60,0) 80%);
   mix-blend-mode:screen;
   opacity:0;
   transition:opacity .45s ease;
@@ -107,21 +124,27 @@ body.dark .bleed{filter:blur(60px) brightness(.22);}
 /* 暗角 */
 .vignette{
   position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(ellipse 70% 55% at 50% 44%, transparent 30%, rgba(4,3,12,.62) 78%, rgba(3,2,9,.92) 100%);
+  background:radial-gradient(ellipse 80% 66% at 50% 52%, transparent 26%, rgba(4,3,12,.56) 76%, rgba(3,2,9,.94) 100%);
   opacity:0;
   transition:opacity 1.15s ease;
 }
 body.dark .vignette{opacity:1;}
+/* 顶部压暗，给题字留出读得清的地 */
+.scrim-top{
+  position:absolute;left:0;right:0;top:0;height:26%;pointer-events:none;
+  background:linear-gradient(to bottom, rgba(6,5,16,.62) 0%, rgba(6,5,16,.22) 52%, rgba(6,5,16,0) 100%);
+}
 
 /* ================================================================
    火焰 —— 主角，多层叠加
+   坐标 = 底图里三根蜡烛的烛芯像素位置（百分比，随舞台等比缩放）
+   左 46.41% / 中 50.26% / 右 54.18%，蜡面顶端 y = 40.3% / 40.05% / 40.25%
    ================================================================ */
 .flame{
   --lit:0;
   position:absolute;
-  width:2.9%;
-  padding-bottom:7.1%;
-  height:0;
+  width:.88%;
+  aspect-ratio:1 / 2.2;
   transform:translateX(-50%) rotate(var(--tilt)) skewX(calc(var(--shear) * 1deg)) scaleY(calc(var(--lit) * var(--stretch)));
   transform-origin:50% 100%;
   opacity:var(--lit);
@@ -189,7 +212,7 @@ body.dark .vignette{opacity:1;}
 
 /* 青烟 */
 .smoke{
-  position:absolute;width:1.5%;aspect-ratio:1;transform:translateX(-50%);
+  position:absolute;width:1.1%;aspect-ratio:1;transform:translateX(-50%);
   border-radius:50%;
   background:radial-gradient(circle, rgba(226,222,238,.46), rgba(200,198,220,0) 70%);
   opacity:0;pointer-events:none;
@@ -197,35 +220,64 @@ body.dark .vignette{opacity:1;}
 .smoke.go{animation:rise 3.2s ease-out forwards;}
 @keyframes rise{
   0%{opacity:0;transform:translate(-50%,0) scale(.4);}
-  16%{opacity:.72;}
-  100%{opacity:0;transform:translate(calc(-50% + 30px),-210px) scale(3.8);}
+  16%{opacity:.7;}
+  100%{opacity:0;transform:translate(calc(-50% + 26px),-190px) scale(3.6);}
 }
 
 .fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
 
 /* ================================================================
-   UI
+   题字
+   ================================================================ */
+.crest{
+  position:absolute;top:clamp(16px,3.4vh,44px);left:50%;
+  transform:translateX(-50%);z-index:6;text-align:center;
+  transition:opacity .9s ease;
+  pointer-events:none;
+}
+.crest p{margin:0;}
+.crest .zh{
+  font-family:var(--f-disp);font-weight:900;
+  font-size:clamp(24px,5vmin,76px);letter-spacing:.4em;text-indent:.4em;
+  color:rgba(246,239,226,.94);
+  text-shadow:0 0 40px rgba(0,0,0,.6), 0 2px 18px rgba(0,0,0,.55);
+}
+.crest .en{
+  margin-top:clamp(4px,.9vh,10px);font-size:clamp(8px,1.15vmin,13px);
+  letter-spacing:.56em;text-indent:.56em;
+  color:rgba(246,239,226,.44);text-transform:uppercase;
+}
+
+/* ================================================================
+   UI —— 16:9 用横向条：左边文，右边操作
    ================================================================ */
 .hud{
-  position:fixed;left:50%;bottom:0;transform:translateX(-50%);
-  z-index:6;width:min(520px,100vw);
-  padding:60px clamp(22px,5vw,34px) calc(30px + env(safe-area-inset-bottom));
-  display:flex;flex-direction:column;gap:15px;align-items:center;text-align:center;
-  background:linear-gradient(to top, rgba(5,4,12,.9) 0%, rgba(5,4,12,.62) 46%, rgba(5,4,12,0) 100%);
+  position:absolute;left:0;right:0;bottom:0;z-index:7;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:end;
+  gap:clamp(18px,3.4vw,64px);
+  padding:clamp(56px,9vh,96px) clamp(20px,4.4vw,64px) clamp(16px,3vh,30px);
+  background:linear-gradient(to top,
+    rgba(3,2,9,.97) 0%, rgba(3,2,9,.88) 28%, rgba(3,2,9,.52) 62%, rgba(3,2,9,0) 100%);
+  text-align:left;
 }
+.hud-l{display:flex;flex-direction:column;align-items:flex-start;gap:clamp(6px,1.1vh,12px);min-width:0;}
+.hud-r{display:flex;flex-direction:column;align-items:flex-end;gap:clamp(8px,1.4vh,14px);}
+
 .kicker{
-  margin:0;font-size:10px;font-weight:300;
+  margin:0;font-size:clamp(9px,1.1vmin,12px);font-weight:300;
   letter-spacing:.62em;text-indent:.62em;
-  color:rgba(246,239,226,.42);text-transform:uppercase;
+  color:rgba(246,239,226,.44);text-transform:uppercase;
 }
 .title{
   margin:0;font-family:var(--f-disp);font-weight:600;
-  font-size:clamp(25px,5.6vw,33px);letter-spacing:.1em;
+  font-size:clamp(24px,3.6vmin,50px);letter-spacing:.1em;line-height:1.2;
   text-shadow:0 0 34px rgba(255,160,70,.34);
 }
 .desc{
-  margin:0;font-size:13.5px;line-height:1.75;font-weight:200;
-  color:rgba(246,239,226,.6);max-width:32em;
+  margin:0;font-size:clamp(12.5px,1.45vmin,18px);line-height:1.7;font-weight:200;
+  color:rgba(246,239,226,.64);max-width:36em;
 }
 .desc em{font-style:normal;color:var(--mint);font-weight:400;}
 
@@ -235,6 +287,7 @@ body.dark .vignette{opacity:1;}
   border:none;border-radius:999px;padding:15px 44px;min-height:48px;cursor:pointer;
   box-shadow:0 8px 30px rgba(255,168,80,.26), inset 0 -2px 0 rgba(0,0,0,.09);
   transition:transform .18s, box-shadow .18s;
+  white-space:nowrap;
 }
 .btn:hover{transform:translateY(-2px);box-shadow:0 13px 38px rgba(255,168,80,.4);}
 .btn:active{transform:translateY(0);}
@@ -242,23 +295,23 @@ body.dark .vignette{opacity:1;}
 .btn.ghost{
   background:none;color:rgba(246,239,226,.6);
   border:1px solid rgba(246,239,226,.24);box-shadow:none;
-  padding:12px 26px;font-size:12.5px;min-height:44px;
+  padding:12px 24px;font-size:12.5px;min-height:44px;
 }
 .btn.ghost:hover{color:var(--wax);transform:none;box-shadow:none;}
 
-.field{width:100%;}
+.field{width:min(460px,100%);margin-top:clamp(4px,.8vh,8px);}
 .wish{
-  width:100%;font-family:var(--f-hand);font-size:23px;line-height:1.6;
-  text-align:center;color:var(--wax);
+  width:100%;font-family:var(--f-hand);font-size:clamp(18px,2.2vmin,26px);line-height:1.5;
+  text-align:left;color:var(--wax);
   background:rgba(246,239,226,.05);
   border:none;border-bottom:1px solid rgba(246,239,226,.2);
-  border-radius:10px 10px 0 0;padding:15px;
+  border-radius:10px 10px 0 0;padding:12px 16px;
 }
-.wish::placeholder{color:rgba(246,239,226,.26);font-size:20px;}
+.wish::placeholder{color:rgba(246,239,226,.28);font-size:.9em;font-family:var(--f-body);letter-spacing:.04em;}
 .wish:focus{outline:none;border-bottom-color:var(--mint);background:rgba(246,239,226,.09);}
 
 /* 风力计 —— 签名交互的读数 */
-.gauge{width:100%;max-width:330px;display:flex;flex-direction:column;gap:8px;}
+.gauge{width:clamp(180px,24vw,320px);display:flex;flex-direction:column;gap:8px;}
 .bar{position:relative;height:5px;border-radius:99px;background:rgba(246,239,226,.13);overflow:hidden;}
 .bar-fill{
   position:absolute;inset:0 auto 0 0;width:0%;border-radius:99px;
@@ -272,44 +325,23 @@ body.dark .vignette{opacity:1;}
 }
 .gauge-txt{
   display:flex;justify-content:space-between;
-  font-size:10.5px;letter-spacing:.2em;color:rgba(246,239,226,.4);
+  font-size:clamp(9px,1.1vmin,12px);letter-spacing:.2em;color:rgba(246,239,226,.42);
 }
 .gauge-txt b{font-weight:400;font-variant-numeric:tabular-nums;}
 
 .echo{
   margin:0;font-family:var(--f-hand);
-  font-size:clamp(26px,6.4vw,36px);line-height:1.5;
+  font-size:clamp(22px,3.1vmin,42px);line-height:1.4;
   text-shadow:0 0 36px rgba(255,196,116,.44);word-break:break-word;
+  max-width:38em;
 }
-.row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;}
-.tip{margin:0;font-size:11.5px;line-height:1.6;color:rgba(246,239,226,.36);}
+.row{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}
+.tip{margin:0;font-size:clamp(10px,1.15vmin,13px);line-height:1.6;color:rgba(246,239,226,.38);text-align:right;}
 .hidden{display:none!important;}
-
-/* 顶部题字 */
-.crest{
-  position:fixed;top:calc(26px + env(safe-area-inset-top));left:50%;
-  transform:translateX(-50%);z-index:6;text-align:center;
-  transition:opacity .9s ease;
-}
-.crest p{margin:0;}
-.crest .zh{
-  font-family:var(--f-disp);font-weight:900;
-  font-size:clamp(20px,4.8vw,26px);letter-spacing:.42em;text-indent:.42em;
-  color:rgba(246,239,226,.92);
-}
-.crest .en{
-  margin-top:7px;font-size:9px;letter-spacing:.56em;text-indent:.56em;
-  color:rgba(246,239,226,.36);text-transform:uppercase;
-}
-
-@media (prefers-reduced-motion:reduce){
-  .f-outer,.f-mid,.f-core,.f-halo{animation:none;}
-  *{transition-duration:.01ms!important;}
-}
 
 /* 音乐开关 */
 .audio-btn{
-  position:fixed;right:18px;top:calc(18px + env(safe-area-inset-top));
+  position:absolute;right:clamp(10px,1.6vw,22px);top:clamp(10px,1.6vh,22px);
   z-index:30;
   width:38px;height:38px;border-radius:50%;
   border:1px solid rgba(246,239,226,.2);
@@ -326,10 +358,36 @@ body.dark .vignette{opacity:1;}
 .audio-btn.muted .off-slash{opacity:1;}
 .audio-btn.muted .wave{opacity:0;}
 
-@media (max-height:660px){
-  .hud{padding-top:34px;gap:11px;}
-  .title{font-size:21px;}
-  .wish{font-size:19px;padding:11px;}
+/* 竖屏/窄屏兜底：舞台铺满整屏，场景按 16:9 等比裁切放大（蛋糕仍在正中），
+   火焰住在场景框里，所以裁切不会让它和烛芯错位 */
+@media (max-aspect-ratio: 1 / 1){
+  .frame{
+    width:100vw;height:100dvh;
+    aspect-ratio:auto;
+    box-shadow:none;
+  }
+  .scene{width:auto;height:100%;}
+  .hud{
+    grid-template-columns:1fr;
+    justify-items:center;text-align:center;
+    gap:14px;
+    padding:clamp(40px,7vh,70px) 18px calc(16px + env(safe-area-inset-bottom));
+  }
+  .hud-l{align-items:center;text-align:center;}
+  .hud-r{align-items:center;width:100%;}
+  .row{justify-content:center;}
+  .tip{text-align:center;}
+  .wish{text-align:center;}
+}
+@media (max-height:640px){
+  .hud{padding-top:40px;gap:14px;}
+  .title{font-size:clamp(20px,3.2vmin,34px);}
+  .wish{font-size:17px;padding:10px 14px;}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .f-outer,.f-mid,.f-core,.f-halo{animation:none;}
+  *{transition-duration:.01ms!important;}
 }
 </style>
 </head>
@@ -339,67 +397,68 @@ body.dark .vignette{opacity:1;}
 
 <main class="stage">
   <div class="frame" id="frame">
-    <div class="plate day"></div>
-    <div class="plate night"></div>
-    <div class="vignette"></div>
-    <div class="spill"></div>
+    <div class="scene" id="scene">
+      <div class="plate day"></div>
+      <div class="plate night"></div>
+      <div class="vignette"></div>
+      <div class="spill"></div>
+
+      <!-- 火焰：坐标取自暗场底图里三根蜡烛的烛芯像素位置 -->
+      <div class="flame" id="fl0" style="left:46.41%;bottom:59.7%;">
+        <div class="f-halo"></div><div class="f-outer"></div><div class="f-mid"></div><div class="f-core"></div>
+      </div>
+      <div class="flame" id="fl1" style="left:50.26%;bottom:59.95%;">
+        <div class="f-halo"></div><div class="f-outer"></div><div class="f-mid"></div><div class="f-core"></div>
+      </div>
+      <div class="flame" id="fl2" style="left:54.18%;bottom:59.75%;">
+        <div class="f-halo"></div><div class="f-outer"></div><div class="f-mid"></div><div class="f-core"></div>
+      </div>
+    </div>
+
+    <div class="scrim-top"></div>
     <div class="blackout" id="blackout"></div>
-
-    <!-- 火焰：坐标取自暗场底图的烛芯像素位置 -->
-    <div class="flame" id="fl0" style="left:37.19%;bottom:66.9%;">
-      <div class="f-halo"></div><div class="f-outer"></div><div class="f-mid"></div><div class="f-core"></div>
-    </div>
-    <div class="flame" id="fl1" style="left:50.70%;bottom:66.85%;">
-      <div class="f-halo"></div><div class="f-outer"></div><div class="f-mid"></div><div class="f-core"></div>
-    </div>
-    <div class="flame" id="fl2" style="left:63.67%;bottom:66.8%;">
-      <div class="f-halo"></div><div class="f-outer"></div><div class="f-mid"></div><div class="f-core"></div>
-    </div>
-
     <canvas class="fx" id="fx"></canvas>
+
+    <div class="crest" id="crest">
+      <p class="zh">生日快乐</p>
+      <p class="en">make a wish</p>
+    </div>
+
+    <section class="hud">
+      <div class="hud-l">
+        <p class="kicker" id="kicker">tonight</p>
+        <h1 class="title" id="title">把灯关了吧</h1>
+        <p class="desc" id="desc">房间暗下来，蛋糕和火才看得见。</p>
+        <div class="field hidden" id="field">
+          <input class="wish" id="wishIn" type="text" maxlength="24" autocomplete="off"
+                 placeholder="想好了就吹，写不写都行">
+        </div>
+        <p class="echo hidden" id="echo"></p>
+      </div>
+
+      <div class="hud-r">
+        <div class="gauge hidden" id="gauge">
+          <div class="bar"><div class="bar-fill" id="barFill"></div><div class="bar-live" id="barLive"></div></div>
+          <div class="gauge-txt"><span id="gaugeTxt">正在听</span><b id="gaugePct">0%</b></div>
+        </div>
+        <p class="tip hidden" id="tip"></p>
+        <div class="row">
+          <button class="btn" id="mainBtn" type="button">关灯</button>
+          <button class="btn ghost hidden" id="altBtn" type="button">按住代替吹气</button>
+        </div>
+      </div>
+    </section>
+
+    <button class="audio-btn" id="audioBtn" type="button" aria-label="生日快乐音乐开关" title="生日快乐 · MIDI 音序">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"></path>
+        <path class="wave" d="M16 9.2a4 4 0 0 1 0 5.6"></path>
+        <path class="wave" d="M18.6 6.6a7.6 7.6 0 0 1 0 10.8"></path>
+        <path class="off-slash" d="M19 5 L5 19"></path>
+      </svg>
+    </button>
   </div>
 </main>
-
-<div class="crest" id="crest">
-  <p class="zh">生日快乐</p>
-  <p class="en">make a wish</p>
-</div>
-
-<section class="hud">
-  <p class="kicker" id="kicker">tonight</p>
-  <h1 class="title" id="title">把灯关了吧</h1>
-  <p class="desc" id="desc">房间暗下来，火才看得见。</p>
-
-  <div class="field hidden" id="field">
-    <input class="wish" id="wishIn" type="text" maxlength="24" autocomplete="off"
-           placeholder="想好了就吹，写不写都行">
-  </div>
-
-  <div class="gauge hidden" id="gauge">
-    <div class="bar"><div class="bar-fill" id="barFill"></div><div class="bar-live" id="barLive"></div></div>
-    <div class="gauge-txt"><span id="gaugeTxt">正在听</span><b id="gaugePct">0%</b></div>
-  </div>
-
-  <p class="echo hidden" id="echo"></p>
-
-  <div class="row">
-    <button class="btn" id="mainBtn" type="button">关灯</button>
-    <button class="btn ghost hidden" id="altBtn" type="button">按住代替吹气</button>
-  </div>
-
-  <p class="tip hidden" id="tip"></p>
-</section>
-
-<button class="audio-btn" id="audioBtn" type="button" aria-label="背景音乐开关" title="背景音乐">
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"></path>
-    <path class="wave" d="M16 9.2a4 4 0 0 1 0 5.6"></path>
-    <path class="wave" d="M18.6 6.6a7.6 7.6 0 0 1 0 10.8"></path>
-    <path class="off-slash" d="M19 5 L5 19"></path>
-  </svg>
-</button>
-
-<audio id="bgm" loop preload="auto" src="https://aka.doubaocdn.com/s/pd3CfrJwgf"></audio>
 
 <script>
 (function(){
@@ -414,12 +473,14 @@ body.dark .vignette{opacity:1;}
       crest=$("crest"), frame=$("frame"), blackout=$("blackout"), cv=$("fx");
 
   var FL = [$("fl0"),$("fl1"),$("fl2")];
-  var FX = [37.19, 50.70, 63.67];
-  var FY = [66.90, 66.85, 66.80];
+  /* 火焰横坐标 / 底边（%）：与底图烛芯严格对应，逐屏不变 */
+  var FX = [46.41, 50.26, 54.18];
+  var FY = [59.70, 59.95, 59.75];
 
   var S = { step:0, lit:[false,false,false], prog:0, live:0, wish:"", mic:false, manual:false };
 
   var SPILL = document.querySelector(".spill");
+  var SCENE = document.querySelector(".scene");
   var PLATE_DAY = document.querySelector(".plate.day");
   var PLATE_NIGHT = document.querySelector(".plate.night");
   var VIGNETTE = document.querySelector(".vignette");
@@ -430,7 +491,7 @@ body.dark .vignette{opacity:1;}
     PLATE_DAY.style.opacity   = on ? "0" : "1";
     PLATE_NIGHT.style.opacity = on ? "1" : "0";
     VIGNETTE.style.opacity    = on ? "1" : "0";
-    BLEED.style.filter = "blur(60px) brightness(" + (on ? ".22" : ".72") + ")";
+    BLEED.style.filter = "blur(70px) brightness(" + (on ? ".16" : ".62") + ")";
   }
 
   function show(e){ e.classList.remove("hidden"); }
@@ -451,7 +512,7 @@ body.dark .vignette{opacity:1;}
     FL[i].style.setProperty("--lit","1");
     FL[i].style.opacity="1";
     glow();
-    sparkBurst(i, 12, 0.5);
+    sparkBurst(i, 14, 0.5);
   }
   function light(i, d){
     litQueue.push({i:i, at: performance.now() + d});
@@ -474,7 +535,7 @@ body.dark .vignette{opacity:1;}
     glow();
     var s=document.createElement("div");
     s.className="smoke"; s.style.left=FX[i]+"%"; s.style.bottom=FY[i]+"%";
-    frame.appendChild(s);
+    SCENE.appendChild(s);
     requestAnimationFrame(function(){ s.classList.add("go"); });
     setTimeout(function(){ if(s.parentNode) s.parentNode.removeChild(s); }, 3400);
   }
@@ -514,8 +575,9 @@ body.dark .vignette{opacity:1;}
   fit();
 
   function sparkBurst(i, n, pw){
-    var r = frame.getBoundingClientRect();
-    var bx = r.width*(FX[i]/100)*dpr, by = r.height*(1-FY[i]/100)*dpr;
+    var sr = SCENE.getBoundingClientRect(), fr = frame.getBoundingClientRect();
+    var bx = (sr.left-fr.left + sr.width*(FX[i]/100))*dpr,
+        by = (sr.top-fr.top + sr.height*(1-FY[i]/100))*dpr;
     for(var k=0;k<n;k++){
       spark.push({
         x:bx+(Math.random()-.5)*14*dpr, y:by+(Math.random()-.5)*9*dpr,
@@ -530,9 +592,9 @@ body.dark .vignette{opacity:1;}
     g.clearRect(0,0,cv.width,cv.height);
     var lit = S.lit.filter(Boolean).length;
 
-    /* 浮尘：只在暗场里出现，靠近烛光更亮 */
+    /* 浮尘：只在暗场里出现，靠近蛋糕与烛光更亮 */
     if(S.step>=1 && lit>0){
-      var cx = cv.width*.5, cy = cv.height*(1-.665);
+      var cx = cv.width*.503, cy = cv.height*(1-.58);
       for(var i=0;i<dust.length;i++){
         var p=dust[i];
         p.x+=p.vx + Math.sin(Date.now()/1400+p.ph)*.16*dpr;
@@ -617,6 +679,98 @@ body.dark .vignette{opacity:1;}
     return clamp(over/46,0,1);
   }
 
+  /* ================= 生日快乐（MIDI 音序 · Web Audio 合成） =================
+     音符 = MIDI note number，时长 = 拍数。
+     曲谱：G4 G4 A4 G4 C5 B4 / G4 G4 A4 G4 D5 C5 /
+           G4 G4 G5 E5 C5 B4 A4 / F5 F5 E5 C5 D5 C5
+     ==================================================================== */
+  var MELODY = [
+    [67,.5],[67,.5],[69,1],[67,1],[72,1],[71,2],
+    [67,.5],[67,.5],[69,1],[67,1],[74,1],[72,2],
+    [67,.5],[67,.5],[79,1],[76,1],[72,1],[71,1],[69,2],
+    [77,.5],[77,.5],[76,1],[72,1],[74,1],[72,2]
+  ];
+  var BEAT = .46, LOOP_GAP = 1.7;
+
+  var ACN=null, ACO=null, midiTimer=null, midiTime=0, midiIdx=0, musicOn=true, musicStarted=false;
+
+  function audioCtx(){
+    if(!ACN){
+      var A = window.AudioContext||window.webkitAudioContext;
+      if(!A) return null;
+      ACN = new A();
+    }
+    if(ACN.state==="suspended") ACN.resume();
+    if(!ACO){
+      ACO = ACN.createGain();
+      ACO.gain.value = 0;
+      var lp = ACN.createBiquadFilter();
+      lp.type="lowpass"; lp.frequency.value=5400; lp.Q.value=.4;
+      ACO.connect(lp); lp.connect(ACN.destination);
+    }
+    return ACN;
+  }
+
+  /* 一个音：三角波主体 + 二倍频正弦泛音，做出老式 MIDI 音源的木质感 */
+  function tone(when, midi, dur){
+    var f = 440*Math.pow(2,(midi-69)/12);
+    var g1 = ACN.createGain();
+    var o1 = ACN.createOscillator(); o1.type="triangle"; o1.frequency.value=f;
+    var o2 = ACN.createOscillator(); o2.type="sine";     o2.frequency.value=f*2.02;
+    var g2 = ACN.createGain(); g2.gain.value=.26;
+    o1.connect(g1); o2.connect(g2); g2.connect(g1); g1.connect(ACO);
+    g1.gain.setValueAtTime(0, when);
+    g1.gain.linearRampToValueAtTime(.85, when+.035);
+    g1.gain.exponentialRampToValueAtTime(.22, when+Math.max(.14,dur*.58));
+    g1.gain.exponentialRampToValueAtTime(.0015, when+dur);
+    o1.start(when); o2.start(when);
+    o1.stop(when+dur+.08); o2.stop(when+dur+.08);
+  }
+
+  function pumpMidi(){
+    if(!ACN || !musicOn) return;
+    var horizon = ACN.currentTime + .6;
+    while(midiTime < horizon){
+      var n = MELODY[midiIdx];
+      tone(midiTime, n[0], n[1]*BEAT*.94);
+      midiTime += n[1]*BEAT;
+      midiIdx++;
+      if(midiIdx >= MELODY.length){ midiIdx = 0; midiTime += LOOP_GAP; }
+    }
+  }
+  function startMusic(){
+    if(!musicOn) return;
+    if(!audioCtx()) return;
+    musicStarted = true;
+    midiIdx = 0;
+    midiTime = ACN.currentTime + .35;
+    if(midiTimer) clearInterval(midiTimer);
+    pumpMidi();
+    midiTimer = setInterval(pumpMidi, 70);
+    ACO.gain.cancelScheduledValues(ACN.currentTime);
+    ACO.gain.setTargetAtTime(.30, ACN.currentTime, .55);
+  }
+  function duckMusic(v){
+    if(!ACN||!ACO) return;
+    ACO.gain.setTargetAtTime(v, ACN.currentTime, .8);
+  }
+  function stopMusic(){
+    if(midiTimer){ clearInterval(midiTimer); midiTimer = null; }
+    musicStarted = false;
+    if(ACN && ACO) ACO.gain.setTargetAtTime(0, ACN.currentTime, .25);
+  }
+
+  var audioBtn=$("audioBtn");
+  audioBtn.addEventListener("click", function(){
+    musicOn = !musicOn;
+    audioBtn.classList.toggle("muted", !musicOn);
+    if(musicOn){
+      if(S.step>=1 && S.step<3) startMusic();
+    }else{
+      stopMusic();
+    }
+  });
+
   /* ================= 主循环 ================= */
   var hold=false, last=performance.now();
   function loop(now){
@@ -659,45 +813,22 @@ body.dark .vignette{opacity:1;}
   }
   requestAnimationFrame(loop);
 
-  /* ---------- 音频 ---------- */
-  var bgm=$("bgm"), audioBtn=$("audioBtn");
-  var musicOn=true;
-  function tryPlayBGM(){
-    if(!musicOn) return;
-    bgm.volume=0;
-    var p=bgm.play();
-    if(p && p.catch) p.catch(function(){});
-    /* 淡入 */
-    var t0=performance.now();
-    (function fade(){
-      var k=Math.min((performance.now()-t0)/1600,1);
-      bgm.volume=k*0.55;
-      if(k<1) requestAnimationFrame(fade);
-    })();
-  }
-  audioBtn.addEventListener("click", function(){
-    musicOn=!musicOn;
-    audioBtn.classList.toggle("muted", !musicOn);
-    if(musicOn){ tryPlayBGM(); }
-    else { bgm.pause(); }
-  });
-
   /* ================= 流程 ================= */
   function toWish(){
     S.step=1;
     blackout.classList.add("flash");
-    setDark(true);
-    tryPlayBGM();                 /* 此刻已有用户手势，可绕过自动播放限制 */
-    R.style.setProperty("--dark","1");
-    crest.style.opacity="0";
-    light(1,760); light(0,1040); light(2,1290);
+    setDark(true);                 /* 关灯：蛋糕在烛光里现身 */
+    startMusic();                  /* 此刻已有用户手势，生日快乐 MIDI 直接响起 */
+    crest.style.opacity="1";
+
+    light(1, 900); light(0, 1180); light(2, 1450);
 
     kicker.textContent="your wish";
     title.textContent="许个愿";
     desc.innerHTML="写下来，或者<em>只在心里想</em>。";
     show(field);
     mainBtn.textContent="想好了";
-    setTimeout(function(){ wishIn.focus(); }, 900);
+    setTimeout(function(){ wishIn.focus(); }, 950);
   }
   function toBlow(){
     S.step=2; S.wish=wishIn.value.trim();
@@ -716,6 +847,7 @@ body.dark .vignette{opacity:1;}
     R.style.setProperty("--stretch","1");
     R.style.setProperty("--shudder","0");
     for(var i=0;i<3;i++) sparkBurst(i,42,1.15);
+    duckMusic(.08);
 
     if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
     if(ac){ ac.close(); ac=null; }
@@ -736,9 +868,9 @@ body.dark .vignette{opacity:1;}
     ready=false; cf=0; cs=0; base=0; spark.length=0; litQueue.length=0;
     blackout.classList.remove("flash");
     setDark(false);
+    stopMusic();
     FL.forEach(function(f){ f.style.setProperty("--lit","0"); f.style.opacity="0"; });
     glow();
-    R.style.setProperty("--dark","0");
     R.style.setProperty("--tilt","0deg");
     R.style.setProperty("--shear","0");
     R.style.setProperty("--stretch","1");
@@ -749,7 +881,7 @@ body.dark .vignette{opacity:1;}
     hide(echo); hide(gauge); hide(field); hide(altBtn); hide(tip);
     kicker.textContent="tonight";
     title.textContent="把灯关了吧";
-    desc.textContent="房间暗下来，火才看得见。";
+    desc.textContent="房间暗下来，蛋糕和火才看得见。";
     mainBtn.textContent="关灯"; show(mainBtn);
   }
 
@@ -760,6 +892,14 @@ body.dark .vignette{opacity:1;}
   });
   wishIn.addEventListener("keydown", function(e){
     if(e.key==="Enter" && S.step===1) toBlow();
+  });
+
+  /* 大屏/遥控器：空格或回车直接推进流程（输入框内不拦） */
+  window.addEventListener("keydown", function(e){
+    if(e.target===wishIn) return;
+    if(e.key===" "||e.key==="Enter"){
+      if(S.step===0||S.step===1||S.step===3){ e.preventDefault(); mainBtn.click(); }
+    }
   });
 
   function on(e){ e.preventDefault(); hold=true; }
